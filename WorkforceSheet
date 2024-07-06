@@ -1,0 +1,145 @@
+var ss;
+var sheet;
+var range;
+var row;
+var column;
+var value;
+var ui = SpreadsheetApp.getUi();
+
+var databaseSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Database");
+var parametersSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Parameters");
+var historySheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("History");
+
+var currentJobs = parametersSheet.getRange(2,2,parametersSheet.getLastRow(),1).getValues().flat();
+var jobSheets = parametersSheet.getRange(2,3,parametersSheet.getLastRow(),1).getValues().flat();
+var jobDictionary = buildDictionaryFromColumns("D", "C");
+
+
+function onEdit(e) {
+  setup(e);
+  sendEdit();
+
+}
+
+function setup(e){
+  ss = e.source;
+  sheet = ss.getActiveSheet();
+  range = e.range;
+  row = range.getRow();
+  column = range.getColumn();
+  value = range.getValue();
+}
+
+
+function sendEdit(){
+  var hiredColumn = getHeaderColumn(sheet,"Hired");
+
+  if (hiredColumn == 0) return;
+  if (column == hiredColumn && row >= 2) {
+    hiredColumnEdit(hiredColumn);
+  }
+
+  var inCampColumn = getHeaderColumn(sheet, "In Camp");
+  if (inCampColumn == 0) return;
+  if (jobSheets.includes(sheet.getName()) && column == inCampColumn && row >= 2) {
+    inCampColumnEdit();
+  }
+
+  if (sheet.getName() == "Interested" && column == inCampColumn && row >= 2) {
+    if (value === false) {
+        var response = ui.alert('Confirmation', 'Do you want to remove this entry?', ui.ButtonSet.YES_NO);
+        if (response == "YES") {
+            sheet.deleteRows(row);
+        }else{
+            range.setValue(true);
+        }
+    }
+  }
+}
+
+function inCampColumnEdit(){
+  if (value === false) {
+    var response = ui.alert('Confirmation', 'Did this resident leave camp?', ui.ButtonSet.YES_NO);
+    if (response == "YES") {
+      var lastRow = historySheet.getLastRow();
+      var nextRow = lastRow + 1;
+      var sourceRange = sheet.getRange(row, 1, 1, sheet.getLastColumn());
+      historySheet.insertRowAfter(historySheet.getLastRow());
+      var targetRange = historySheet.getRange(nextRow, 1, 1, sheet.getLastColumn());
+      targetRange.clear();
+
+      sourceRange.copyTo(targetRange);
+      historySheet.showRows(nextRow);
+      sheet.deleteRows(row);
+    }
+    else{
+      range.setValue(true);
+    }
+  }
+}
+
+function hiredColumnEdit(hiredColumn){
+
+  var jobColumn = hiredColumn + 1; 
+  if (value === true) {
+    var response = ui.alert('Confirmation', 'Do you want to hire this resident?', ui.ButtonSet.YES_NO);
+    if (response == "YES") {
+      var jobValue = sheet.getRange(row, jobColumn).getValue();
+
+      var destinationSheetName = jobDictionary[jobValue] || "Other"; // all other cases to other
+      var destinationSheet = ss.getSheetByName(destinationSheetName);
+
+      var lastRow = destinationSheet.getLastRow();
+      var nextRow = lastRow + 1; 
+      destinationSheet.insertRowAfter(lastRow); 
+      var emptyRowRange = destinationSheet.getRange(nextRow, 1, 1, destinationSheet.getLastColumn());
+      emptyRowRange.clear();
+
+      var sourceRange = sheet.getRange(row, 1, 1, sheet.getLastColumn());
+      var targetRange = destinationSheet.getRange(nextRow, 1, 1, sheet.getLastColumn());
+      sourceRange.copyTo(targetRange);
+      sheet.deleteRows(row);
+    } else{
+      range.setValue(false);
+    }
+
+  } else if (value === false && jobSheets.includes(sheet.getName())) {
+    var response = ui.alert('Confirmation', 'Is this resident finished working?', ui.ButtonSet.YES_NO);
+    if (response == "YES") {
+      var lastRow = historySheet.getLastRow();
+      var nextRow = lastRow + 1;
+      var sourceRange = sheet.getRange(row, 1, 1, sheet.getLastColumn());
+      historySheet.insertRowAfter(historySheet.getLastRow());
+      var targetRange = historySheet.getRange(nextRow, 1, 1, sheet.getLastColumn());
+      targetRange.clear();
+      sourceRange.copyTo(targetRange);
+      historySheet.showRows(nextRow);
+      sheet.deleteRows(row);
+    }else{
+      range.setValue(true);
+    }
+  }
+  return;
+}
+
+//helper functions
+function getHeaderColumn(sheet, header) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var columnIndex = headers.indexOf(header);
+  return columnIndex + 1; 
+}
+function buildDictionaryFromColumns(keyColumn, valueColumn) {
+  var keys = parametersSheet.getRange(keyColumn + "1:" + keyColumn + parametersSheet.getLastRow()).getValues().flat();
+  var values = parametersSheet.getRange(valueColumn + "1:" + valueColumn + parametersSheet.getLastRow()).getValues().flat();
+  return buildDictionary(keys, values);
+}
+function buildDictionary(keys, values) {
+  var dictionary = {};
+  for (var i = 0; i < keys.length; i++) {
+    dictionary[keys[i]] = values[i];
+  }
+  return dictionary;
+}
+
+
+
